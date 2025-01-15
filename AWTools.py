@@ -4,6 +4,26 @@ from bpy import context as C
 import numpy as np
 import random
 
+### Google translate lib ###
+'''
+import subprocess
+import sys
+import os
+
+try:
+    from googletrans import Translator
+except ImportError:
+    python_exe = os.path.join(sys.prefix, 'bin', 'python.exe')
+
+    subprocess.call([python_exe, "-m", "ensurepip"])
+    subprocess.call([python_exe, "-m", "pip", "install", "--upgrade", "pip"])
+    subprocess.call([python_exe, "-m", "pip", "install", "googletrans==4.0.0-rc1"])
+
+    print("Google translate has been successfully installed.")
+else:
+    print("Google translate is already installed.")
+'''
+
 from bpy.props import FloatProperty
 from bpy.props import IntProperty
 
@@ -360,8 +380,6 @@ def dp_clear(obj, pbone):
         if const.name.startswith("DP_"):
             obj.constraints.remove(const)
 
-import bpy
-
 def set_custom_shape_to_bones(custom_object_name):
     # Ensure the custom object exists
     custom_object = bpy.data.objects.get(custom_object_name)
@@ -382,6 +400,51 @@ def set_custom_shape_to_bones(custom_object_name):
         bone.custom_shape = custom_object
         print(f"Set custom shape for bone '{bone.name}'")
     return {'FINISHED'}
+
+def rename_bone(bone_name, new_name):
+    obj = bpy.context.active_object
+    if obj and obj.type == 'ARMATURE':
+        armature = obj.data
+        bone = armature.bones.get(bone_name)
+        if bone is not None:
+            bone.name = new_name
+            print(f'Bone {bone_name} renamed to {new_name}.')
+        else:
+            print(f'Bone {bone_name} is not found!')
+    else:
+        print('Object not is armature!')
+
+def delete_bone(bone_name):
+    obj = bpy.context.active_object
+    if obj and obj.type == 'ARMATURE':
+        bpy.ops.object.mode_set(mode='EDIT')
+        armature = obj.data
+        edit_bone = armature.edit_bones.get(bone_name)
+        if edit_bone is not None:
+            armature.edit_bones.remove(edit_bone)
+            print(f'Bone {bone_name} deleted!')
+        else:
+            print(f'Bone {bone_name} is not found!')
+        
+        bpy.ops.object.mode_set(mode='OBJECT')
+    else:
+        print('Object not is armature!')
+
+
+def parent_bones(child_name, parent_name):
+    obj = bpy.context.active_object
+    if obj and obj.type == 'ARMATURE':
+        bpy.ops.object.mode_set(mode='EDIT')
+        armature = obj.data
+        child_bone = armature.edit_bones.get(child_name)
+        parent_bone = armature.edit_bones.get(parent_name)
+        if child_bone and parent_bone:
+            child_bone.parent = parent_bone
+            print(f'Bone {child_name} parent to {parent_name}')
+        else:
+            print('Bones not found!')
+    else:
+        print('Object not is armature!')
 
 class AWTools_LowercaseShapeKeys(bpy.types.Operator):
     """Change shape key names to lowercase"""
@@ -551,6 +614,20 @@ class AWTools_RenameBlendshapes(bpy.types.Operator):
         self.report({'INFO'}, "Shapes renamed.")
         return {'FINISHED'}
 
+
+class AWTools_RenameMeshesObjectToData(bpy.types.Operator):
+    """Rename meshes"""
+    bl_idname = "awt.renamemeshesobjecttodata"
+    bl_label = "Rename meshes object to data"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
+        for obj in selected_meshes:
+            obj.data.name = obj.name
+
+        self.report({'INFO'}, "Meshes object to data renamed.")
+        return {'FINISHED'}
 
 class AWTools_Renamerbone(bpy.types.PropertyGroup):
     KeyBone: bpy.props.StringProperty(name="Key")
@@ -790,6 +867,7 @@ class AWTools_TransferWeightbonestobone(bpy.types.Operator):
                 if Dellold:
                     obj.vertex_groups.remove(obj.vertex_groups[getOldWeight])
 
+            # Update view layer
             bpy.context.view_layer.update()
         
         return {'FINISHED'}
@@ -845,11 +923,87 @@ class AWTools_TransferWeightbonestobonemassrig(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
+        #obj = bpy.context.active_object
         selected_object = bpy.context.active_object
 
         getOldWeight = context.scene.Transferweightname.KeyOldWeight
         weightAdd = context.scene.Transferweightname.AddActiveBoneWeight
         Dellold = context.scene.Transferweightname.DellOldWeight
+        """
+        selected_rig = None
+        for obj in bpy.context.selected_objects:
+            if obj.type == 'ARMATURE':
+                selected_rig = obj
+                break
+
+        if selected_rig is None:
+            self.report({'WARNING'}, "No armature selected!")
+            return {'CANCELLED'}
+
+        for obj in bpy.context.scene.objects:
+            if obj.type == 'MESH':
+                for modifier in obj.modifiers:
+                    if modifier.type == 'ARMATURE' and modifier.object == selected_rig:
+                        if getOldWeight in obj.vertex_groups and weightAdd in obj.vertex_groups:
+                            new_bone_vgroup_index = obj.vertex_groups[weightAdd].index
+
+                            for vertex in obj.data.vertices:
+                                old_weight = 0
+                                for group in vertex.groups:
+                                    if group.group == obj.vertex_groups[getOldWeight].index:
+                                        old_weight = group.weight
+                                        break
+                                
+                                for group in vertex.groups:
+                                    if group.group == new_bone_vgroup_index:
+                                        obj.vertex_groups[new_bone_vgroup_index].add([vertex.index], old_weight, 'ADD')
+                                        break
+                                else:
+                                    obj.vertex_groups[new_bone_vgroup_index].add([vertex.index], old_weight, 'REPLACE')
+
+                            if Dellold:
+                                obj.vertex_groups.remove(obj.vertex_groups[getOldWeight])
+        """
+        """
+        if selected_object.type != 'MESH':
+            self.report({'WARNING'}, "Must select a mesh object!")
+            return {'CANCELLED'}
+
+        linked_rig = None
+        for modifier in selected_object.modifiers:
+            if modifier.type == 'ARMATURE':
+                linked_rig = modifier.object
+                break
+
+        if linked_rig is None:
+            self.report({'WARNING'}, "No armature linked to the selected mesh")
+            return {'CANCELLED'}
+
+        for obj in bpy.context.scene.objects:
+            if obj.type == 'MESH':
+                for modifier in obj.modifiers:
+                    if modifier.type == 'ARMATURE' and modifier.object == linked_rig:
+                        if getOldWeight in obj.vertex_groups and weightAdd in obj.vertex_groups:
+                            new_bone_vgroup_index = obj.vertex_groups[weightAdd].index
+
+                            for vertex in obj.data.vertices:
+                                old_weight = 0
+                                for group in vertex.groups:
+                                    if group.group == obj.vertex_groups[getOldWeight].index:
+                                        old_weight = group.weight
+                                        break
+                                
+                                for group in vertex.groups:
+                                    if group.group == new_bone_vgroup_index:
+                                        obj.vertex_groups[new_bone_vgroup_index].add([vertex.index], old_weight, 'ADD')
+                                        break
+                                else:
+                                    obj.vertex_groups[new_bone_vgroup_index].add([vertex.index], old_weight, 'REPLACE')
+
+                            if Dellold:
+                                obj.vertex_groups.remove(obj.vertex_groups[getOldWeight])
+
+        """
 
         if selected_object.type == 'ARMATURE':
             linked_rig = selected_object
@@ -1026,6 +1180,182 @@ class AWTools_CopyLocationHandarp(bpy.types.Operator):
         
         return {'FINISHED'}
 
+class AWTools_RigifyToUE(bpy.types.Operator):
+    """Clear rigify rig and rename to UE"""
+    bl_idname = "awt.rigifytoue"
+    bl_label = "Clear rigify rig and rename to UE"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        # Delete trash bones
+        delete_bone("DEF-shoulder.L")
+        delete_bone("DEF-palm.01.L")
+        delete_bone("ORG-palm.01.L") # Maybe
+        delete_bone("DEF-palm.02.L")
+        delete_bone("ORG-palm.02.L") # Maybe
+        delete_bone("DEF-palm.03.L")
+        delete_bone("ORG-palm.03.L") # Maybe
+        delete_bone("DEF-palm.04.L")
+        delete_bone("ORG-palm.04.L") # Maybe
+
+        delete_bone("DEF-shoulder.R")
+        delete_bone("DEF-palm.01.R")
+        delete_bone("ORG-palm.01.R") # Maybe
+        delete_bone("DEF-palm.02.R")
+        delete_bone("ORG-palm.02.R") # Maybe
+        delete_bone("DEF-palm.03.R")
+        delete_bone("ORG-palm.03.R") # Maybe
+        delete_bone("DEF-palm.04.R")
+        delete_bone("ORG-palm.04.R") # Maybe
+
+        delete_bone("ORG-breast.L")
+        delete_bone("ORG-breast.R")
+
+        delete_bone("ORG-pelvis.L")
+        delete_bone("ORG-pelvis.R")
+
+        delete_bone("spine_fk.001")
+        delete_bone("spine_fk.002")
+        delete_bone("spine_fk.003")
+        delete_bone("ORG-spine.003")
+        delete_bone("tweak_spine.003")
+        delete_bone("MCH-spine.001")
+        delete_bone("MCH-spine.002")
+        delete_bone("MCH-spine.003")
+        delete_bone("spine_fk")
+        delete_bone("MCH-spine")
+        delete_bone("torso")
+        delete_bone("ORG-spine")
+        delete_bone("MCH-torso.parent")
+        delete_bone("tweak_spine")
+        delete_bone("MCH-ROT-neck")
+        delete_bone("MCH-ROT-head")
+        delete_bone("neck")
+        delete_bone("head") # Maybe
+
+        # Reset parent bones
+        parent_bones("DEF-breast.L", "DEF-spine.003")
+        parent_bones("DEF-breast.R", "DEF-spine.003")
+
+        parent_bones("ORG-shoulder.L", "DEF-spine.003")
+        parent_bones("ORG-shoulder.R", "DEF-spine.003")
+
+        parent_bones("DEF-spine.006", "DEF-spine.005")
+        parent_bones("DEF-spine.005", "DEF-spine.004")
+        parent_bones("DEF-spine.004", "DEF-spine.003")
+        parent_bones("DEF-spine.003", "DEF-spine.002")
+        parent_bones("DEF-spine.002", "DEF-spine.001")
+
+        # Rename bones
+        rename_bone("DEF-thumb.01.L", "thumb_01_l")
+        rename_bone("DEF-thumb.02.L", "thumb_02_l")
+        rename_bone("DEF-thumb.03.L", "thumb_03_l")
+        rename_bone("DEF-f_index.01.L", "index_01_l")
+        rename_bone("DEF-f_index.02.L", "index_02_l")
+        rename_bone("DEF-f_index.03.L", "index_03_l")
+        rename_bone("DEF-f_middle.01.L", "middle_01_l")
+        rename_bone("DEF-f_middle.02.L", "middle_02_l")
+        rename_bone("DEF-f_middle.03.L", "middle_03_l")
+        rename_bone("DEF-f_ring.01.L", "ring_01_l")
+        rename_bone("DEF-f_ring.02.L", "ring_02_l")
+        rename_bone("DEF-f_ring.03.L", "ring_03_l")
+        rename_bone("DEF-f_pinky.01.L", "pinky_01_l")
+        rename_bone("DEF-f_pinky.02.L", "pinky_02_l")
+        rename_bone("DEF-f_pinky.03.L", "pinky_03_l")
+        rename_bone("DEF-hand.L", "hand_l")
+        rename_bone("DEF-forearm.L.001", "lowerarm_twist_01_l")
+        rename_bone("DEF-forearm.L", "lowerarm_l")
+        rename_bone("DEF-upper_arm.L.001", "upperarm_twist_01_l") #Need check 
+        rename_bone("DEF-upper_arm.L", "upperarm_l") #Need check 
+        rename_bone("ORG-shoulder.L", "clavicle_l")
+
+        rename_bone("DEF-thumb.01.R", "thumb_01_r")
+        rename_bone("DEF-thumb.02.R", "thumb_02_r")
+        rename_bone("DEF-thumb.03.R", "thumb_03_r")
+        rename_bone("DEF-f_index.01.R", "index_01_r")
+        rename_bone("DEF-f_index.02.R", "index_02_r")
+        rename_bone("DEF-f_index.03.R", "index_03_r")
+        rename_bone("DEF-f_middle.01.R", "middle_01_r")
+        rename_bone("DEF-f_middle.02.R", "middle_02_r")
+        rename_bone("DEF-f_middle.03.R", "middle_03_r")
+        rename_bone("DEF-f_ring.01.R", "ring_01_r")
+        rename_bone("DEF-f_ring.02.R", "ring_02_r")
+        rename_bone("DEF-f_ring.03.R", "ring_03_r")
+        rename_bone("DEF-f_pinky.01.R", "pinky_01_r")
+        rename_bone("DEF-f_pinky.02.R", "pinky_02_r")
+        rename_bone("DEF-f_pinky.03.R", "pinky_03_r")
+        rename_bone("DEF-hand.R", "hand_r")
+        rename_bone("DEF-forearm.R.001", "lowerarm_twist_01_r")
+        rename_bone("DEF-forearm.R", "lowerarm_r")
+        rename_bone("DEF-upper_arm.R.001", "upperarm_twist_01_r") #Need check 
+        rename_bone("DEF-upper_arm.R", "upperarm_r") #Need check 
+        rename_bone("ORG-shoulder.R", "clavicle_r")
+
+        rename_bone("DEF-breast.L", "breast_l")
+        rename_bone("DEF-breast.L.001", "breast_twist_r")
+                    
+        rename_bone("DEF-breast.R", "breast_r")
+        rename_bone("DEF-breast.R.001", "breast_twist_r")
+
+        rename_bone("DEF-pelvis.L", "butt_root_l")
+        rename_bone("DEF-pelvis.L.001", "butt_l")
+
+        rename_bone("DEF-pelvis.R", "butt_root_r")
+        rename_bone("DEF-pelvis.R.001", "butt_r")
+
+        rename_bone("DEF-spine.003", "spine_03")
+        rename_bone("DEF-spine.002", "spine_02")
+        rename_bone("DEF-spine.001", "spine_01")
+        rename_bone("DEF-spine.004", "neck_01")
+        rename_bone("DEF-spine.005", "neck_02")
+        rename_bone("DEF-spine.006", "head")
+        rename_bone("DEF-spine", "pelvis")
+
+        rename_bone("DEF-thigh.L", "thigh_l")
+        rename_bone("DEF-thigh.L.001", "thigh_twist_01_l")
+        rename_bone("DEF-shin.L", "calf_l")
+        rename_bone("DEF-shin.L.001", "calf_twist_01_l")
+        rename_bone("DEF-foot.L", "foot_l")
+        rename_bone("DEF-toe.L", "ball_l")
+        rename_bone("Toe1.L", "toes_thumb1_l")
+        rename_bone("Toe2.L", "toes_thumb2_l")
+        rename_bone("Toe3.L", "toes_index1_l")
+        rename_bone("Toe4.L", "toes_index2_l")
+        rename_bone("Toe5.L", "toes_index3_l")
+        rename_bone("Toe6.L", "toes_middle1_l")
+        rename_bone("Toe7.L", "toes_middle2_l")
+        rename_bone("Toe8.L", "toes_middle3_l")
+        rename_bone("Toe9.L", "toes_ring1_l")
+        rename_bone("Toe10.L", "toes_ring2_l")
+        rename_bone("Toe11.L", "toes_ring3_l")
+        rename_bone("Toe12.L", "toes_pinky1_l")
+        rename_bone("Toe13.L", "toes_pinky2_l")
+        rename_bone("Toe14.L", "toes_pinky3_l")
+
+        rename_bone("DEF-thigh.R", "thigh_r")
+        rename_bone("DEF-thigh.R.001", "thigh_twist_01_r")
+        rename_bone("DEF-shin.R", "calf_r")
+        rename_bone("DEF-shin.R.001", "calf_twist_01_r")
+        rename_bone("DEF-foot.R", "foot_r")
+        rename_bone("DEF-toe.R", "ball_r")
+        rename_bone("Toe1.R", "toes_thumb1_r")
+        rename_bone("Toe2.R", "toes_thumb2_r")
+        rename_bone("Toe3.R", "toes_index1.r")
+        rename_bone("Toe4.R", "toes_index2_r")
+        rename_bone("Toe5.R", "toes_index3_r")
+        rename_bone("Toe6.R", "toes_middle1_r")
+        rename_bone("Toe7.R", "toes_middle2_r")
+        rename_bone("Toe8.R", "toes_middle3_r")
+        rename_bone("Toe9.R", "toes_ring1_r")
+        rename_bone("Toe10.R", "toes_ring2_r")
+        rename_bone("Toe11.R", "toes_ring3_r")
+        rename_bone("Toe12.R", "toes_pinky1_r")
+        rename_bone("Toe13.R", "toes_pinky2_r")
+        rename_bone("Toe14.R", "toes_pinky3_r")
+        
+        self.report({'INFO'}, "Rigify to UE rig and apply fix!")
+        return {'FINISHED'}
+
 class AWTools_SelectRingAndMerge(bpy.types.Operator):
     """Select ring loops and merge"""
     bl_idname = "awt.selectring_merge"
@@ -1099,7 +1429,11 @@ class AWTools_OptimizDisablesubdivandmultires(bpy.types.Operator):
     bl_label = "Disable Subdiv and multires on selected"
     bl_description = "Disables all subdivision and multires modifiers for viewport and render. Applies to active and selected"
     bl_options = {"REGISTER", "UNDO"}
-    
+
+    @classmethod
+    def poll(cls, context):
+        return bpy.app.version >= (3, 0, 0)
+
     def execute(self, context):
         for obj in bpy.context.selected_objects:
             for mod in obj.modifiers:
@@ -1115,7 +1449,7 @@ class AWTools_TriangulateNgonsOnActive(bpy.types.Operator):
     bl_label = "Triangulate N-Gons on active"
     bl_description = "Adds a triangulate modifier that targets N-Gons. Applies to active"
     bl_options = {"REGISTER", "UNDO"}
-    
+
     def execute(self, context):
         triangulate_min = 5
         triangulate_min
@@ -1137,7 +1471,7 @@ class AWTools_TriangulateActiveMesh(bpy.types.Operator):
     bl_label = "Triangulate active mesh"
     bl_description = "Adds a triangulate modifier to entire mesh. Applies to active"
     bl_options = {"REGISTER", "UNDO"}
-    
+
     def execute(self, context):
         triangulate_min = 4
         triangulate_min
@@ -1151,6 +1485,221 @@ class AWTools_TriangulateActiveMesh(bpy.types.Operator):
         else:
             self.report({'INFO'}, "No suitable active object found or the active object cannot have modifiers.")
         return {"FINISHED"}
+
+
+class AWTools_VertexgroupsRemoveEmpty(bpy.types.Operator):
+    """Clear empty vertex group"""
+    bl_idname = "awt.vertexgroupclearempty"
+    bl_label = "Delete empty vertex groups"
+    bl_description = "Removing empty vertex groups"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        for obj in bpy.context.selected_objects:
+            if obj.type == 'MESH':
+                use_vg_l = [i.group for v in obj.data.vertices for i in v.groups]
+                use_vg_l = list(set(use_vg_l))
+                del_l = []
+                for vg in reversed(obj.vertex_groups):
+                    if not vg.index in use_vg_l:
+                        obj.vertex_groups.remove(vg)
+                        del_l.append(vg)
+
+                self.report({'INFO'}, "Removed " + str(len(del_l)) + " empty vertex groups.")
+        
+        return {"FINISHED"}
+
+
+# ReverseRelativeMap class for managing shape key relationships
+class ReverseRelativeMap:
+    # Initialize the ReverseRelativeMap
+    def __init__(self, obj):
+        reverse_relative_map = {}
+        basis_key = obj.data.shape_keys.key_blocks[0]
+
+        for key in obj.data.shape_keys.key_blocks:
+            relative_key = basis_key if key == basis_key else key.relative_key
+            keys_relative_to_relative_key = reverse_relative_map.get(relative_key)
+
+            if keys_relative_to_relative_key is None:
+                keys_relative_to_relative_key = {key}
+                reverse_relative_map[relative_key] = keys_relative_to_relative_key
+            else:
+                keys_relative_to_relative_key.add(key)
+
+        self.reverse_relative_map = reverse_relative_map
+
+    # Get recursive relative keys
+    def get_relative_recursive_keys(self, shape_key):
+        shape_set = set()
+
+        def inner_recursive_loop(key, checked_set):
+            if key not in checked_set:
+                checked_set.add(key)
+                keys_relative_to_shape_key_inner = self.reverse_relative_map.get(key)
+
+                if keys_relative_to_shape_key_inner:
+                    for relative_to_inner in keys_relative_to_shape_key_inner:
+                        shape_set.add(relative_to_inner)
+                        inner_recursive_loop(relative_to_inner, checked_set)
+
+        inner_recursive_loop(shape_key, set())
+        return shape_set
+
+def apply_key_to_basis(*, mesh, new_basis_shapekey, keys_relative_recursive_to_new_basis, keys_relative_recursive_to_basis):
+    data = mesh.data
+    num_verts = len(data.vertices)
+
+    new_basis_shapekey_vertex_group_name = new_basis_shapekey.vertex_group
+    if new_basis_shapekey_vertex_group_name:
+        new_basis_shapekey_vertex_group = mesh.vertex_groups.get(new_basis_shapekey_vertex_group_name)
+    else:
+        new_basis_shapekey_vertex_group = None
+
+    new_basis_affected_by_own_application = new_basis_shapekey in keys_relative_recursive_to_basis
+    flattened_co_length = num_verts * 3
+    new_basis_co_flat = np.empty(flattened_co_length, dtype=np.single)
+    new_basis_relative_co_flat = np.empty(flattened_co_length, dtype=np.single)
+
+    new_basis_shapekey.data.foreach_get('co', new_basis_co_flat)
+    new_basis_shapekey.relative_key.data.foreach_get('co', new_basis_relative_co_flat)
+
+    difference_co_flat = np.subtract(new_basis_co_flat, new_basis_relative_co_flat)
+
+    difference_co_flat_value_scaled = np.multiply(difference_co_flat, new_basis_shapekey.value)
+
+    temp_co_array = np.empty(flattened_co_length, dtype=np.single)
+    temp_co_array2 = np.empty(flattened_co_length, dtype=np.single)
+
+    if new_basis_shapekey_vertex_group:
+        self.isolate_active_shape(mesh)
+        new_basis_mixed = mesh.shape_key_add(name="temp shape (you shouldn't see this)", from_mix=True)
+        self.isolate_active_shape(mesh)
+
+        temp_shape_co_flat = temp_co_array
+
+        new_basis_mixed.data.foreach_get('co', temp_shape_co_flat)
+
+        if new_basis_mixed.relative_key == new_basis_shapekey.relative_key:
+            temp_shape_relative_co_flat = new_basis_relative_co_flat
+        else:
+            new_basis_mixed.relative_key.data.foreach_get('co', temp_co_array2)
+            temp_shape_relative_co_flat = temp_co_array2
+
+        difference_co_flat_scaled = np.subtract(temp_shape_co_flat, temp_shape_relative_co_flat)
+        active_index = mesh.active_shape_key_index
+        mesh.shape_key_remove(new_basis_mixed)
+        mesh.active_shape_key_index = active_index
+    else:
+        difference_co_flat_scaled = difference_co_flat_value_scaled
+
+    if new_basis_affected_by_own_application:
+        keys_not_relative_recursive_to_new_basis_and_not_new_basis = (keys_relative_recursive_to_basis - keys_relative_recursive_to_new_basis) - {new_basis_shapekey}
+
+        new_basis_shapekey.relative_key.data.foreach_set('co', np.add(new_basis_relative_co_flat, difference_co_flat_scaled, out=temp_co_array))
+        for key_block in keys_not_relative_recursive_to_new_basis_and_not_new_basis - {new_basis_shapekey.relative_key}:
+            key_block.data.foreach_get('co', temp_co_array)
+            key_block.data.foreach_set('co', np.add(temp_co_array, difference_co_flat_scaled, out=temp_co_array))
+
+        if new_basis_shapekey_vertex_group:
+            np.multiply(difference_co_flat, -1 - new_basis_shapekey.value, out=temp_co_array2)
+            np.add(temp_co_array2, difference_co_flat_scaled, out=temp_co_array2)
+
+            new_basis_shapekey.data.foreach_set('co', np.add(new_basis_co_flat, temp_co_array2, out=temp_co_array))
+
+            for key_block in keys_relative_recursive_to_new_basis:
+                key_block.data.foreach_get('co', temp_co_array)
+                key_block.data.foreach_set('co', np.add(temp_co_array, temp_co_array2, out=temp_co_array))
+        else:
+            new_basis_shapekey.data.foreach_set('co', new_basis_relative_co_flat)
+            for key_block in keys_relative_recursive_to_new_basis:
+                key_block.data.foreach_get('co', temp_co_array)
+                key_block.data.foreach_set('co', np.add(temp_co_array, difference_co_flat, out=temp_co_array))
+    else:
+
+        for key_block in keys_relative_recursive_to_basis:
+            key_block.data.foreach_get('co', temp_co_array)
+            key_block.data.foreach_set('co', np.add(temp_co_array, difference_co_flat_scaled, out=temp_co_array))
+        np.multiply(difference_co_flat, -1 - new_basis_shapekey.value, out=temp_co_array2)
+        new_basis_shapekey.data.foreach_set('co', np.add(new_basis_co_flat, temp_co_array2, out=temp_co_array))
+        for key_block in keys_relative_recursive_to_new_basis:
+            key_block.data.foreach_get('co', temp_co_array)
+            key_block.data.foreach_set('co', np.add(temp_co_array, temp_co_array2, out=temp_co_array))
+
+    data.shape_keys.reference_key.data.foreach_get('co', temp_co_array)
+    data.vertices.foreach_set('co', temp_co_array)
+
+class AWTools_ShapeKeyApplier(bpy.types.Operator):
+    """Replace the 'Basis' shape key with the currently selected shape key"""
+    bl_idname = "awt.shapekeytobasis"
+    bl_label = "ShapeKey to Basis"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    # Execute the operator
+    def execute(self, context):
+        mesh = context.object
+        new_basis_shapekey = mesh.active_shape_key
+        reverse_relative_map = ReverseRelativeMap(mesh)
+        keys_relative_recursive_to_new_basis = reverse_relative_map.get_relative_recursive_keys(new_basis_shapekey)
+        if new_basis_shapekey in keys_relative_recursive_to_new_basis:
+            self.report({'ERROR_INVALID_INPUT'}, "Shape key cannot be relative to itself.")
+            return {'CANCELLED'}
+
+        old_basis_shapekey = mesh.data.shape_keys.key_blocks[0]
+
+        keys_relative_recursive_to_old_basis = reverse_relative_map.get_relative_recursive_keys(old_basis_shapekey)
+
+        if new_basis_shapekey.value == 0.0:
+            new_basis_shapekey.value = 1.0
+
+        apply_key_to_basis(mesh=mesh,
+                                new_basis_shapekey=new_basis_shapekey,
+                                keys_relative_recursive_to_new_basis=keys_relative_recursive_to_new_basis,
+                                keys_relative_recursive_to_basis=keys_relative_recursive_to_old_basis)
+
+        bpy.context.view_layer.update()
+        # Update shapekeys (this work -_-)
+        selected_object = bpy.context.object
+        shape_keys = selected_object.data.shape_keys.key_blocks
+
+        for key in shape_keys:
+            key.name = key.name.replace('', '')
+            
+            
+        self.report({'INFO'}, 'Shape key applied.')
+        return {'FINISHED'}
+
+
+    # Method to draw the operator in the UI
+    #def draw(self, context):
+    #    layout = self.layout
+    #    layout.operator_context = 'INVOKE_DEFAULT'
+    #    layout.operator(AWTools_ShapeKeyApplier.bl_idname, text="Apply Shape to Basis", icon="MOD_VERTEX_WEIGHT")
+
+class AWTool_TranslateShapekey(bpy.types.Operator):
+    """Translate shapekey name from any language to English"""
+    bl_idname = "awt.shapeytranslate"
+    bl_label = "Translate shapekey name other lang to EN"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        if bpy.context.active_object:
+            selected_shapekey = bpy.context.active_object.active_shape_key
+            if selected_shapekey:
+                translator = Translator()
+                shapekey_name = selected_shapekey.name
+                english_name = translator.translate(shapekey_name, dest='en').text
+                selected_shapekey.name = english_name
+                #print(f"Translated shapekey name from other lang to English: {shapekey_name} -> {english_name}")
+                self.report({'INFO'}, f"Translated shapekey name from other lang to English: {shapekey_name} -> {english_name}")
+            else:
+                print("No active shape key selected.")
+                self.report({'WARNING'}, 'No active object selected.')
+        else:
+            print("No active object selected.")
+            self.report({'WARNING'}, 'No active object selected.')
+                
+        return {'FINISHED'}
 
 class AWTools_ui(bpy.types.Panel):
     bl_label = "Awesomium tools"
@@ -1249,8 +1798,11 @@ class AWUI_Cleaner_panel(bpy.types.Panel):
             row.operator("awt.cleandrivers", text="Clear all driver shape keys", icon="PANEL_CLOSE")
             row = layout.row()
             row.operator("awt.cleanlessblends", text="Clear empty shape keys", icon="FULLSCREEN_EXIT")
-            row = layout.row()
 
+            row = layout.row()
+            row.operator("awt.vertexgroupclearempty", text="Delete empty vertex groups", icon="DRIVER_TRANSFORM")
+
+            row = layout.row()
             row.operator("awt.clearmaterials", text="Clear unused materials", icon="NODE_MATERIAL")
             row.operator("awt.cleartextures", text="Clear unused textures", icon="NODE_TEXTURE")
             
@@ -1294,6 +1846,15 @@ class AWUI_Shapekeys_panel(bpy.types.Panel):
 
             row = layout.row()
             row.operator("awt.renameshapes", text="Rename blendshapes", icon="OUTLINER_DATA_GP_LAYER")
+
+
+            row = layout.row()
+            row.operator("awt.shapekeytobasis", text="Shapekey to basis", icon="UV_SYNC_SELECT")
+            #row = layout.row()
+            #row.operator("awt.shapekeysplitter", text="Shapekey split", icon="OUTLINER_DATA_GP_LAYER")
+            
+            #row = layout.row()
+            #row.operator("awt.shapeytranslate", text="Translate shapekey Lang->En", icon="URL")
             
         except:
             print('AWTool Error panel!') 
@@ -1373,6 +1934,9 @@ class AWUI_Bones_panel(bpy.types.Panel):
             row = layout.row()
             row.operator("awt.copylocationhand", text="Copy def mode", icon="GROUP_BONE")
             row.operator("awt.copylocationhandarp", text="Copy ARP mode", icon="GROUP_BONE")
+            
+            row = layout.row()
+            row.operator("awt.rigifytoue", text="Rigify clean and rename to UE rig", icon="ARMATURE_DATA")
             
         except:
             print('AWTool Error panel!') 
@@ -1488,6 +2052,10 @@ class AWUI_Other_panel(bpy.types.Panel):
             row = layout.row()
             row.operator("awt.renamemmdtoeng", text="Rename bones/mats MMD JP to English", icon="FONTPREVIEW")
 
+            row = layout.row()
+            row.operator("awt.renamemeshesobjecttodata", text="Rename meshes object to data", icon="SORTALPHA")
+            
+
         except:
             print('AWTool Error panel!') 
 
@@ -1501,6 +2069,7 @@ classes = (
     AWTools_CleanTextures,
     AWTools_Renamer,
     AWTools_RenameBlendshapes,
+    AWTools_RenameMeshesObjectToData,
     AWTools_Renamerbone,
     AWTools_RenameBones,
     AWTools_TransferLimitIK,
@@ -1517,12 +2086,16 @@ classes = (
     AWTools_SetCustomShape,
     AWTools_CopyLocationHanddef,
     AWTools_CopyLocationHandarp,
+    AWTools_RigifyToUE,
     AWTools_SelectRingAndMerge,
     AWTools_SelectRingAndDissolve,
     AWTools_RenameEngMMD,
     AWTools_OptimizDisablesubdivandmultires,
     AWTools_TriangulateNgonsOnActive,
     AWTools_TriangulateActiveMesh,
+    AWTools_VertexgroupsRemoveEmpty,
+    AWTools_ShapeKeyApplier,
+    AWTool_TranslateShapekey,
     AWTools_ui,
     AWUI_Statistics_panel,
     AWUI_Cleaner_panel,
